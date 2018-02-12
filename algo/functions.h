@@ -1,5 +1,11 @@
 #pragma once
+
+/* to disable exprtk warnings */
+#pragma GCC diagnostic push 
+#pragma GCC diagnostic ignored "-Wall"
 #include "OGF/femb/third_party/exprtk.hpp"
+#pragma GCC diagnostic pop
+
 #include <string>
 
 namespace femb {
