@@ -16,6 +16,8 @@
 namespace femb {
     using namespace GEO;
 
+    const double tet_volume = 1./6;
+
     std::vector<double> triangle_o2 = { 
         0.166666666666667, 0.166666666666667, 0.166666666666667,
         0.166666666666667, 0.166666666666667, 0.666666666666667,
