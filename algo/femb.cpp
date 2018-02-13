@@ -16,8 +16,7 @@
 namespace femb {
     using namespace GEO;
 
-    const double tet_volume = 1./6;
-
+    /* Basic quadratures */
     std::vector<double> triangle_o2 = { 
         0.166666666666667, 0.166666666666667, 0.166666666666667,
         0.166666666666667, 0.166666666666667, 0.666666666666667,
@@ -32,6 +31,10 @@ namespace femb {
         0.111690794839006, 0.445948490915965, 0.10810301816807,
         0.111690794839006, 0.10810301816807, 0.445948490915965
     }; 
+
+    std::vector<double> tetra_o1 = { 
+        0.16666666666666666, 0.25, 0.25, 0.25
+    };
 
     std::vector<double> tetra_o2 = { 
         0.0416666666666667, 0.138196601125011, 0.138196601125011, 0.138196601125011,
@@ -54,14 +57,50 @@ namespace femb {
         0.0248888888888889, 0.100596423833201, 0.399403576166799, 0.399403576166799
     }; 
 
-    typedef GEO::Matrix<3,double> Mat;
-
-    double determinant(Mat M) {
-        return det3x3(M.data()[0], M.data()[1], M.data()[2], M.data()[3],
-                M.data()[4], M.data()[5], M.data()[6], M.data()[7],
-                M.data()[8]);
+    /* Basic matrix stuff for dim 2 and 3 */
+    double determinant(const double M[9]) {
+		return M[0*3 + 0] * (M[1*3 + 1] * M[2*3 + 2] - M[2*3 + 1] * M[1*3 + 2]) -
+			M[0*3 + 1] * (M[1*3 + 0] * M[2*3 + 2] - M[1*3 + 2] * M[2*3 + 0]) +
+			M[0*3 + 2] * (M[1*3 + 0] * M[2*3 + 1] - M[1*3 + 1] * M[2*3 + 0]);
     }
 
+	double invert_3x3(const double M[9], double invM[9]){
+		const double det = M[0*3 + 0] * (M[1*3 + 1] * M[2*3 + 2] - M[2*3 + 1] * M[1*3 + 2]) -
+			M[0*3 + 1] * (M[1*3 + 0] * M[2*3 + 2] - M[1*3 + 2] * M[2*3 + 0]) +
+			M[0*3 + 2] * (M[1*3 + 0] * M[2*3 + 1] - M[1*3 + 1] * M[2*3 + 0]);
+		geo_debug_assert(det != 0.);
+		double invdet = 1. / det;
+		invM[0*3 + 0] = (M[1*3 + 1] * M[2*3 + 2] - M[2*3 + 1] * M[1*3 + 2]) * invdet;
+		invM[0*3 + 1] = (M[0*3 + 2] * M[2*3 + 1] - M[0*3 + 1] * M[2*3 + 2]) * invdet;
+		invM[0*3 + 2] = (M[0*3 + 1] * M[1*3 + 2] - M[0*3 + 2] * M[1*3 + 1]) * invdet;
+		invM[1*3 + 0] = (M[1*3 + 2] * M[2*3 + 0] - M[1*3 + 0] * M[2*3 + 2]) * invdet;
+		invM[1*3 + 1] = (M[0*3 + 0] * M[2*3 + 2] - M[0*3 + 2] * M[2*3 + 0]) * invdet;
+		invM[1*3 + 2] = (M[1*3 + 0] * M[0*3 + 2] - M[0*3 + 0] * M[1*3 + 2]) * invdet;
+		invM[2*3 + 0] = (M[1*3 + 0] * M[2*3 + 1] - M[2*3 + 0] * M[1*3 + 1]) * invdet;
+		invM[2*3 + 1] = (M[2*3 + 0] * M[0*3 + 1] - M[0*3 + 0] * M[2*3 + 1]) * invdet;
+		invM[2*3 + 2] = (M[0*3 + 0] * M[1*3 + 1] - M[1*3 + 0] * M[0*3 + 1]) * invdet;	
+		return det;
+	}
+
+	void transpose(const double* M, index_t m, index_t n, double* Mt) {
+        for (index_t i = 0; i < m; ++i) {
+            for (index_t j = 0; j < n; ++j) {
+                Mt[j*m+i] = M[i*n+j];
+            }
+        }
+    }
+
+    vec3 matvec(const double M[9], vec3 v) {
+        vec3 r(0.,0.,0.);
+        for (index_t i = 0; i < 3; ++i) {
+            for (index_t j = 0; j < 3; ++j) {
+                r.data()[i] += M[3*i+j] * v.data()[j];
+            }
+        }
+        return r;
+    }
+
+    /* Basic FEM tet mappings */
     vec3 mapping_tet_transform(const Mesh& M, index_t c, vec3 x_ref) {
         const vec3 p0 = M.vertices.point(M.cells.vertex(c,0));
         const vec3 p1 = M.vertices.point(M.cells.vertex(c,1));
@@ -71,21 +110,19 @@ namespace femb {
     }
 
     /* does not depend on x_ref because P1 mappings */
-    Mat mapping_tet_jacobian(const Mesh& M, index_t c) {
+    void mapping_tet_jacobian(const Mesh& M, index_t c, double J[9]) {
         /* Mapping: p = (1-u-v-w)*p_0 + u*p_1 + v*p_2 + w*p_3
          * jacobian matrix: J(i,j) = dF_i/dx_j */
         const vec3 p0 = M.vertices.point(M.cells.vertex(c,0));
         const vec3 p1 = M.vertices.point(M.cells.vertex(c,1));
         const vec3 p2 = M.vertices.point(M.cells.vertex(c,2));
         const vec3 p3 = M.vertices.point(M.cells.vertex(c,3));
-        Mat J; 
-        J.load_zero();
-        J(0,0) = - p0.x + p1.x; J(0,1) = - p0.x + p2.x; J(0,2) = - p0.x + p3.x; 
-        J(1,0) = - p0.y + p1.y; J(1,1) = - p0.y + p2.y; J(1,2) = - p0.y + p3.y; 
-        J(2,0) = - p0.z + p1.z; J(2,1) = - p0.z + p2.z; J(2,2) = - p0.z + p3.z; 
-        return J;
+        J[0*3+0] = - p0.x + p1.x; J[0*3+1] = - p0.x + p2.x; J[0*3+2] = - p0.x + p3.x; 
+        J[1*3+0] = - p0.y + p1.y; J[1*3+1] = - p0.y + p2.y; J[1*3+2] = - p0.y + p3.y; 
+        J[2*3+0] = - p0.z + p1.z; J[2*3+1] = - p0.z + p2.z; J[2*3+2] = - p0.z + p3.z; 
     }
 
+    /* Basic FEM shape functions for P1 elements */
     double phi_tet_eval(index_t i, vec3 x_ref) {
         geo_debug_assert(i >= 0 && i < 4);
         switch( i ) {
@@ -106,7 +143,7 @@ namespace femb {
         geo_debug_assert(i >= 0 && i < 4);
         switch( i ) {
             case 0:
-                return vec3(-1.,-1.,-.1);
+                return vec3(-1.,-1.,-1.);
             case 1:
                 return vec3(1.,0.,0.);
             case 2:
@@ -115,12 +152,6 @@ namespace femb {
                 return vec3(0.,0.,1.);
         }
         return vec3(0.,0.,0.) ; // should not be reached
-    }
-
-    vec3 matvec(Mat M, vec3 v) {
-        vec3 r(0.,0.,0.);
-        mult(M,v.data(),r.data()) ;
-        return r;
     }
 
     bool fem_simulation(Mesh& M,
@@ -209,16 +240,19 @@ namespace femb {
         Logger::out("fem") << "assembly, loop on " << M.cells.nb() << " cells .. (" << M.vertices.nb() << " dofs)" << std::endl;
         for (index_t c = 0; c < M.cells.nb(); ++c) {
             const index_t ln = M.cells.nb_vertices(c); /* 4 local dofs per tet */
-            Mat J = mapping_tet_jacobian(M, c);
-            double detJ = std::abs(determinant(J));
-            geo_debug_assert(detJ > 0.);
-            Mat iJt = J.inverse().transpose();
+            double J[3*3]; /* jacobian matrix of the mapping */
+            mapping_tet_jacobian(M, c, J);
+            double iJ[9];  /* inverse of jacobian */
+            double detJ = std::abs(invert_3x3(J, iJ));
+            double iJt[9]; /* (J^-1)^T */
+            transpose(iJ, 3, 3, iJt);
 
             /* Loop over grad-grad quadrature points */
             std::vector<double> Ke(ln*ln, 0.); /* Elementary matrix Ke */
-            for (index_t k = 0; k < tetra_o2.size() / 4; ++k ) {
-                double w = tetra_o2[4*k];
-                vec3 x_r = vec3(tetra_o2[4*k+1], tetra_o2[4*k+2], tetra_o2[4*k+3]);
+            const std::vector<double>& quad = tetra_o2;
+            for (index_t k = 0; k < quad.size() / 4; ++k ) {
+                double w = quad[4*k];
+                vec3 x_r = vec3(quad[4*k+1], quad[4*k+2], quad[4*k+3]);
                 vec3 x = mapping_tet_transform(M, c, x_r);
                 double pre = coef(x.data()) * w * detJ;
                 /* Loop over local dofs */
@@ -233,13 +267,13 @@ namespace femb {
 
             /* Loop over rhs quadrature points */
             std::vector<double> Fe(ln, 0.); /* Elementary vector */
-            for (index_t k = 0; k < tetra_o4.size() / 4; ++k ) {
-                double w = tetra_o4[4*k];
-                vec3 x_r = vec3(tetra_o4[4*k+1], tetra_o4[4*k+2], tetra_o4[4*k+3]);
+            const std::vector<double>& quad_rhs = tetra_o4;
+            for (index_t k = 0; k < quad_rhs.size() / 4; ++k ) {
+                double w = quad_rhs[4*k];
+                vec3 x_r = vec3(quad_rhs[4*k+1], quad_rhs[4*k+2], quad_rhs[4*k+3]);
                 vec3 x = mapping_tet_transform(M, c, x_r);
                 for (index_t li = 0; li < ln; ++li) {
                     Fe[li] += w * f(x.data()) * phi_tet_eval(li, x_r) * detJ;
-                    // printf("%.2e, %.2e, %.2e, %.2e\n", w, f(x.data()), phi_tet_eval(li, x_r), detJ);
                 }
             }
 
@@ -248,11 +282,10 @@ namespace femb {
                 for (index_t lj = 0; lj < ln; ++lj) {
                     nlAddIJCoefficient(M.cells.vertex(c,li), M.cells.vertex(c,lj),
                             Ke[ln*li+lj]);
-                    // printf("mat: %i,%i <- %i,%i | +%.2e\n", M.cells.vertex(c,li),
-                    //         M.cells.vertex(c,lj), li, lj, Fe[li]);
                 }
+            }
+            for (index_t li = 0; li < ln; ++li) {
                 nlAddIRightHandSide(M.cells.vertex(c,li), Fe[li]);
-                // printf("rhs: %i <- %i | +%.2e\n", M.cells.vertex(c,li), li, Fe[li]);
             }
 
         }
