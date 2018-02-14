@@ -42,7 +42,7 @@ Two possibilities:
 **b)** From the Graphite GUI: open Graphite, load a mesh (right click on Scene), right click on the new mesh
 and use the *FEM* menu.
 
-After the simulation, a new mesh is created in the scene (with the suffix \_fem) with the solution as an vertex attribute (named `u` by default). Right click
+After the simulation, a new mesh is created in the scene (with the suffix \_fem) with the solution as a vertex attribute (named `u` by default). Right click
 on the new mesh and use the *Properties* menu to visualize the attributes.
 
 ### Problem specification
@@ -64,7 +64,7 @@ Same for Neumann BCs:
 
 Diffusion coefficient and source term use only the evaluation formula:
 
-    diffusion_value  = "if (z > 0.5, 10., -1)"
+    diffusion_value  = "if (z > 0.5, 10., 1.)"
     sourceterm_value = "if ( (x-0.5)^2 + (y-0.5)^2 + (z-0.5)^2 < 0.1^2, 1., 0.)"
 
 As `ExprTk` allows complicated evaluation functions, it is possible to define
@@ -75,7 +75,7 @@ problem definition.
 ### Example
 
 In the following example, we start with the point cloud of an ancient amphora (`data/amphora_pts.meshb`).
-The mesh-preprocessing step of the plugin takes care of building the tetrahedral mesh (surface reconstruction
+The mesh preprocessing step of the plugin takes care of building the tetrahedral mesh (surface reconstruction
 of the boundary with `Geogram` algorithms and interior volume meshing with `TetGen`).  We apply the following Poisson problem:
 
     {
