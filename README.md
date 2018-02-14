@@ -91,4 +91,6 @@ Results:
 
 [<img src="docs/img/amphora_both.png">](docs/img/amphora_both.png)
 
+See `data/amphora_test.lua` to launch the problem from command line.
+
 
