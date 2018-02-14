@@ -101,6 +101,13 @@ namespace femb {
     }
 
     /* Basic FEM tet mappings */
+    vec3 mapping_tri_transform(const Mesh& M, index_t f, vec2 x_ref) {
+        const vec3 p0 = M.vertices.point(M.facets.vertex(f,0));
+        const vec3 p1 = M.vertices.point(M.facets.vertex(f,1));
+        const vec3 p2 = M.vertices.point(M.facets.vertex(f,2));
+        return (1.-x_ref.x-x_ref.y)*p0 + x_ref.x*p1 + x_ref.y * p2;
+    }
+
     vec3 mapping_tet_transform(const Mesh& M, index_t c, vec3 x_ref) {
         const vec3 p0 = M.vertices.point(M.cells.vertex(c,0));
         const vec3 p1 = M.vertices.point(M.cells.vertex(c,1));
@@ -109,8 +116,21 @@ namespace femb {
         return (1.-x_ref.x-x_ref.y-x_ref.z)*p0 + x_ref.x*p1 + x_ref.y * p2 + x_ref.z * p3;
     }
 
+    double mapping_tri_jacobian(const Mesh& M, index_t f) {
+        /* mapping is R^2 to R^3, we use the pseudo jacobian matrix
+         * pJ = J^T J to get a square one and compute the jacobian
+         * as sqrt(det(pJ)) */
+        const vec3 p0 = M.vertices.point(M.facets.vertex(f,0));
+        const vec3 p1 = M.vertices.point(M.facets.vertex(f,1));
+        const vec3 p2 = M.vertices.point(M.facets.vertex(f,2));
+        const vec3 p10 = p1 - p0;
+        const vec3 p20 = p2 - p0;
+        const double detpJ = dot(p10,p10)*dot(p20,p20) - dot(p20,p10)*dot(p10,p20);
+        return sqrt(detpJ);
+    }
+
     /* does not depend on x_ref because P1 mappings */
-    void mapping_tet_jacobian(const Mesh& M, index_t c, double J[9]) {
+    void mapping_tet_jacobian_mat(const Mesh& M, index_t c, double J[9]) {
         /* Mapping: p = (1-u-v-w)*p_0 + u*p_1 + v*p_2 + w*p_3
          * jacobian matrix: J(i,j) = dF_i/dx_j */
         const vec3 p0 = M.vertices.point(M.cells.vertex(c,0));
@@ -123,6 +143,19 @@ namespace femb {
     }
 
     /* Basic FEM shape functions for P1 elements */
+    double phi_tri_eval(index_t i, vec2 x_ref) {
+        geo_debug_assert(i >= 0 && i < 3);
+        switch( i ) {
+            case 0:
+                return 1. - x_ref.x - x_ref.y;
+            case 1:
+                return x_ref.x ;
+            case 2:
+                return x_ref.y ;
+        }
+        return 0. ; // should not be reached
+    }
+
     double phi_tet_eval(index_t i, vec3 x_ref) {
         geo_debug_assert(i >= 0 && i < 4);
         switch( i ) {
@@ -241,7 +274,7 @@ namespace femb {
         for (index_t c = 0; c < M.cells.nb(); ++c) {
             const index_t ln = M.cells.nb_vertices(c); /* 4 local dofs per tet */
             double J[3*3]; /* jacobian matrix of the mapping */
-            mapping_tet_jacobian(M, c, J);
+            mapping_tet_jacobian_mat(M, c, J);
             double iJ[9];  /* inverse of jacobian */
             double detJ = std::abs(invert_3x3(J, iJ));
             double iJt[9]; /* (J^-1)^T */
@@ -291,11 +324,12 @@ namespace femb {
         }
 
         /* Before loop on facets,
-         * We flag facets with a constant per-facet attribute
+         * We flag facets with a constant per-facet attribute, whose values
+         * indicate the boundary type:
          *  0: zero neumann (zero flux)
          *  1: dirichlet (imposed value)
          *  2: non-zero neumann (imposed normal gradient)
-         * This attribute is useful for visualization / debugging
+         * This GEO::Mesh attribute is useful for visualization / debugging
          * */
         Attribute<int> bc(M.facets.attributes(), "bc_type");
         bc.fill(0.);
@@ -311,22 +345,42 @@ namespace femb {
             }
         }
 
+        /* Loop on facets to assemble Neumann contributions to RHS */
+        Logger::out("fem") << "assembly, loop on " << M.facets.nb() << " facets ..";
+        const std::vector<double>& quad_neu = triangle_o2;
+        for (index_t f = 0; f < M.facets.nb(); ++f) {
+            if (bc[f] != 2) continue; /* boundary type check */
+            double Fe_n[3] = {0.,0.,0.};
+            double detJ = std::abs(mapping_tri_jacobian(M,f));
+            for (index_t k = 0; k < quad_neu.size() / 3; ++k ) {
+                double w = quad_neu[3*k];
+                vec2 x_r = vec2(quad_neu[3*k+1], quad_neu[3*k+2]);
+                vec3 x = mapping_tri_transform(M, f, x_r);
+                for (index_t li = 0; li < 3; ++li) {
+                    Fe_n[li] += w * neumann(x.data()) * phi_tri_eval(li, x_r) * detJ;
+                }
+            }
+            /* Contribution to global RHS */
+            for (index_t li = 0; li < 3; ++li) {
+                nlAddIRightHandSide(M.facets.vertex(f,li), Fe_n[li]);
+            }
+        }
+
         /* Apply Dirichlet boundary conditions (with the penaly method) */
         Logger::out("fem") << "assembly, enforcing dirichlet BCs ..";
         const double penalty = 100000. ;
         std::vector<bool> dirichlet_locked(M.vertices.nb(), false);
         index_t nb_dirichlet = 0;
         for (index_t f = 0; f < M.facets.nb(); ++f) {
-            if (bc[f] == 1) {
-                for (index_t lv = 0; lv < M.facets.nb_vertices(f); ++lv) {
-                    index_t v = M.facets.vertex(f,lv);
-                    if (!dirichlet_locked[v]) {
-                        double value = dirichlet(M.vertices.point_ptr(v));
-                        nlAddIJCoefficient(v, v, penalty);
-                        nlAddIRightHandSide(v, penalty*value);
-                        dirichlet_locked[v] = true;
-                        nb_dirichlet += 1;
-                    }
+            if (bc[f] != 1) continue; /* boundary type check */
+            for (index_t lv = 0; lv < M.facets.nb_vertices(f); ++lv) {
+                index_t v = M.facets.vertex(f,lv);
+                if (!dirichlet_locked[v]) {
+                    double value = dirichlet(M.vertices.point_ptr(v));
+                    nlAddIJCoefficient(v, v, penalty);
+                    nlAddIRightHandSide(v, penalty*value);
+                    dirichlet_locked[v] = true;
+                    nb_dirichlet += 1;
                 }
             }
         }

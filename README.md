@@ -7,11 +7,13 @@ See the [tutorial](docs/tutorial.md) for more information.
 
 The FEM implementation is in the file `algo/femb.cpp`
 
-To run the sinus bump simulation from command line:
-
+To run simulations from command line:
 
    graphite  data/cube_s12.meshb data/sinbump_test.lua 
+   graphite  data/cube_s12.meshb data/neumann_test.lua 
 
+
+Validation: same results than with *MFEM* on `sinbump_test.lua` and `neumann_test.lua`
 
 
 
