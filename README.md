@@ -74,8 +74,9 @@ problem definition.
 
 ### Example
 
-In the following example, we start with the point cloud of an ancient amphora (`data/amphora_pts.meshb`)
-and we apply the following problem:
+In the following example, we start with the point cloud of an ancient amphora (`data/amphora_pts.meshb`).
+The mesh-preprocessing step of the plugin takes care of building the tetrahedral mesh (surface reconstruction
+of the boundary with `Geogram` algorithms and interior volume meshing with `TetGen`).  We apply the following Poisson problem:
 
     {
         dirichlet_region="if(y > 0.95, 1, -1)", 
