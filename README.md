@@ -1,4 +1,6 @@
-Graphite plugin that implements P1 FEM for Poisson equation on tetrahedral meshes.
+# femb: basic FEM with Graphite
+
+This is a *Graphite* plugin that implements P1 FEM for Poisson equation on tetrahedral meshes.
 
 The interest of this code is mainly to show how to use the Geogram and Graphite
 APIs, functions and classes. The FEM part is very basic and simple.
@@ -42,5 +44,51 @@ and use the *FEM* menu.
 
 After the simulation, a new mesh is created in the scene (with the suffix \_fem) with the solution as an vertex attribute (named `u` by default). Right click
 on the new mesh and use the *Properties* menu to visualize the attributes.
+
+### Problem specification
+
+The Poisson problem is specified via explicit formulas thanks to the powerful math parsing and
+evaluation library [ExprTk](https://github.com/ArashPartow/exprtk). See ExptTk documentation for
+the complete list of supported functions.
+
+Dirichlet BCs are specified by a region formula and by an evaluation formula. A mesh facet is considered Dirichlet if the 
+dirichlet region formula is positive at its center. E.g.:
+
+    dirichlet_region = "if (x < 0.1){1.} else if (z > 0.99){1.} else {-1.}"
+    dirichlet_value  = "cos(x) * sin(z) - x^2"
+
+Same for Neumann BCs:
+
+    neumann_region = "if (x^2 + y^2 < 0.3^,1,-1)"
+    neumann_value  = "cos(x) * sin(z) - x^2"
+
+Diffusion coefficient and source term use only the evaluation formula:
+
+    diffusion_value  = "if (z > 0.5, 10., -1)"
+    sourceterm_value = "if ( (x-0.5)^2 + (y-0.5)^2 + (z-0.5)^2 < 0.1^2, 1., 0.)"
+
+As `ExprTk` allows complicated evaluation functions, it is possible to define
+complicated Poisson problems with this simple API.  There is no need to tags the
+mesh facets before import. Regions are solely determined by the math formulas of the
+problem definition.
+
+### Example
+
+In the following example, we start with the point cloud of an ancient amphora (`data/amphora_pts.meshb`)
+and we apply the following problem:
+
+    {
+        dirichlet_region="if(y > 0.95, 1, -1)", 
+        dirichlet_value="0", 
+        neumann_region="if(y < 0.10, 1, -1)",
+        neumann_value="1.", 
+        sourceterm_value="0", 
+        diffusion_value="1", 
+        solution_name="u"
+    }
+
+Results:
+
+[<img src="docs/img/amphora_both.png">](docs/img/amphora_both.png)
 
 

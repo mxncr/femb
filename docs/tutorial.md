@@ -21,6 +21,11 @@ In particular, we will look at the following:
 - visualization of meshes and scalar fields in Graphite
 - automated runs via Lua scripting
 
+This tutorial explains how to create a new plugin. If you prefer to retrieve the
+existing `femb` plugin directly, please refer to the *Installation* instructions
+of the plugin [README](https://github.com/mxncr/femb) on GitHub.
+
+
 ## Creation of the plugin
 
 Launch `Graphite` and run the command *create plugin*, with *femb* as plugin
@@ -249,7 +254,7 @@ We use the standard weak-form:
 $$ \int_\Omega c \nabla u \cdot \nabla v = \int_\Omega f v + \int_{\partial \Omega_N} g_n v $$
 
 After FEM discretization on a $(\phi_i)_{i=1..n}$ basis of piecewise-linear functions (defined
-on the tets of the mesh `M`), we got the linear system:
+on the tets of the mesh `M`, P1 polynomials so gradients are constant), we got the linear system:
 
 $$ A x = B $$
 
@@ -258,23 +263,20 @@ $$ a_{ij} = \sum_K \int_K c \nabla \phi_i \cdot \nabla \phi_j, \quad b_i = \sum_
 After change of variable (mapping $M$) and quadratures (weights and points $w_k,\hat x_k$):
 
 $$
-a_{ij} = \sum_{k=0}^{p-1} w_k \  c(M(\hat x_k)) \ (J^{-1})^T\nabla\hat{\phi}_i(\hat x_k) \cdot (J^{-1})^T\nabla\hat{\phi}_j(\hat x_k) \ \text{det} J(\hat x_k)
+a_{ij} = \sum_{k=0}^{p-1} w_k \  c(M(\hat x_k)) \ (J^{-1})^T\nabla\hat{\phi}_i \cdot (J^{-1})^T\nabla\hat{\phi}_j \ \text{det}(J)
 $$
 
 $$
-b_{i}^{vol} =  \sum_{k=0}^{p-1} w_k \hat{\phi}_i(\hat x_k)f(M(\hat x_k)) \ \text{det}J(\hat x_k)
+b_{i}^{vol} =  \sum_{k=0}^{p-1} w_k \hat{\phi}_i(\hat x_k)f(M(\hat x_k)) \ \text{det}(J)
 $$
 
-(corriger celui d'après !! TODO)
 $$
-b_{i}^{bdr} = \sum_{k=0}^{p-1} w_k  \hat{\phi}_k(\hat x) \ g_n(M(\hat x)) \ J^T J
+b_{i}^{bdr} = \sum_{k=0}^{p-1} w_k  \hat{\phi}_k(\hat x_k) \ g_n(M(\hat x_k)) \ \sqrt{\text{det}(J^T J)}
 $$
 
 So for each tet `K` of the mesh `M` and for each triangle `dK` of the boundary, we need
-to compute the contributions to the sparse matrix A and the vector B.
+to compute the contributions to the sparse matrix A and to the vector B.
 
-
-### FEM and linear system assembly
 
 ### Solve
 

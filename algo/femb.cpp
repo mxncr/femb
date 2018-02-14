@@ -265,11 +265,18 @@ namespace femb {
         /* Initialize the OpenNL linear system */
         nlNewContext();
         nlSolverParameteri(NL_NB_VARIABLES, (NLint) n);
-
+        nlSolverParameteri(NL_SOLVER, NL_CG);
+        nlSolverParameteri(NL_PRECONDITIONER, NL_PRECOND_JACOBI);
+        nlSolverParameteri(NL_MAX_ITERATIONS, 3000);
+        nlSolverParameterd(NL_THRESHOLD, 1.e-8);
+        // nlEnable(NL_VERBOSE); /* show convergence in real-time */
+        
         nlBegin(NL_SYSTEM);
         nlBegin(NL_MATRIX);
 
         /* Loop on cells */
+        double jacobian_min =  DBL_MAX;
+        double jacobian_max = -DBL_MAX;
         Logger::out("fem") << "assembly, loop on " << M.cells.nb() << " cells .. (" << M.vertices.nb() << " dofs)" << std::endl;
         for (index_t c = 0; c < M.cells.nb(); ++c) {
             const index_t ln = M.cells.nb_vertices(c); /* 4 local dofs per tet */
@@ -277,6 +284,8 @@ namespace femb {
             mapping_tet_jacobian_mat(M, c, J);
             double iJ[9];  /* inverse of jacobian */
             double detJ = std::abs(invert_3x3(J, iJ));
+            jacobian_min = geo_min(jacobian_min, detJ);
+            jacobian_max = geo_max(jacobian_max, detJ);
             double iJt[9]; /* (J^-1)^T */
             transpose(iJ, 3, 3, iJt);
 
@@ -322,6 +331,7 @@ namespace femb {
             }
 
         }
+        Logger::out("fem") << "(mesh quality) min(det(J)): " << jacobian_min << ", max(det(J)): " << jacobian_max << std::endl;
 
         /* Before loop on facets,
          * We flag facets with a constant per-facet attribute, whose values
@@ -333,6 +343,7 @@ namespace femb {
          * */
         Attribute<int> bc(M.facets.attributes(), "bc_type");
         bc.fill(0.);
+        index_t nb_neumann_f = 0;
         for (index_t f = 0; f < M.facets.nb(); ++f) {
             vec3 center = 1./3. * (
                       M.vertices.point(M.facets.vertex(f,0))
@@ -342,11 +353,12 @@ namespace femb {
                 bc[f] = 1;
             } else if (is_neumann(center.data()) > 0.) {
                 bc[f] = 2;
+                nb_neumann_f += 1;
             }
         }
 
         /* Loop on facets to assemble Neumann contributions to RHS */
-        Logger::out("fem") << "assembly, loop on " << M.facets.nb() << " facets ..";
+        Logger::out("fem") << "assembly, loop on " << nb_neumann_f << " Neumann BC facets .." << std::endl;
         const std::vector<double>& quad_neu = triangle_o2;
         for (index_t f = 0; f < M.facets.nb(); ++f) {
             if (bc[f] != 2) continue; /* boundary type check */
@@ -392,6 +404,16 @@ namespace femb {
         /* Call the OpenNL solver */
         Logger::out("fem") << "OpenNL solver .." << std::endl;
         nlSolve();
+
+        NLint nl_nnz;
+        NLint niters;
+        NLdouble res_f;
+        NLdouble timer_solve;
+        nlGetIntegerv(NL_NNZ, &nl_nnz);
+        nlGetIntegerv(NL_USED_ITERATIONS, &niters);
+        nlGetDoublev(NL_ELAPSED_TIME, &timer_solve);
+        nlGetDoublev(NL_ERROR, &res_f);
+        Logger::out("fem") << "(OpenNL stats) iterations: " << niters << ", residual: " << res_f << ", elapsed time:" << timer_solve << " (s)" << std::endl;
         
         /* Copy the result from the solver to mesh vertex attribute */
         double min = DBL_MAX;
