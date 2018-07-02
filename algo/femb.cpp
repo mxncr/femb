@@ -284,8 +284,8 @@ namespace femb {
             mapping_tet_jacobian_mat(M, c, J);
             double iJ[9];  /* inverse of jacobian */
             double detJ = std::abs(invert_3x3(J, iJ));
-            jacobian_min = geo_min(jacobian_min, detJ);
-            jacobian_max = geo_max(jacobian_max, detJ);
+            jacobian_min = std::min(jacobian_min, detJ);
+            jacobian_max = std::max(jacobian_max, detJ);
             double iJt[9]; /* (J^-1)^T */
             transpose(iJ, 3, 3, iJt);
 
@@ -420,8 +420,8 @@ namespace femb {
         double max = -DBL_MAX;
         for (index_t i = 0; i < M.vertices.nb(); ++i) {
             x[i] = nlGetVariable(i);
-            min = geo_min(min, x[i]);
-            max = geo_max(max, x[i]);
+            min = std::min(min, x[i]);
+            max = std::max(max, x[i]);
         }
         Logger::out("fem") << "solution: min=" << min << ", max=" << max << std::endl;
 
