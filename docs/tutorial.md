@@ -28,7 +28,11 @@ of the plugin [README](https://github.com/mxncr/femb) on GitHub.
 
 ## Creation of the plugin
 
-Launch `Graphite` and run the command *create plugin*, with *femb* as plugin
+Launch `Graphite` and check the devel plugin is loaded. *right click on: scene*,
+if the `devel` menu is not available you will need to load the devel plugin: go to 
+*Files -> preferences...* and add *devel* in the plugin list, then save the configuration file.
+
+Run the command *create plugin*, with *femb* as plugin
 name in argument, in the `devel` menu. It generates a folder `femb` in the
 directory containing all the `Graphite` plugins.
 
